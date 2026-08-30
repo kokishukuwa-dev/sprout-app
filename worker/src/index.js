@@ -40,12 +40,25 @@ function extractTitle(prop) {
   return (prop?.title || []).map((t) => t.plain_text).join("");
 }
 
-function toTask(page) {
+async function statusPropertyId(env) {
+  const res = await fetch(`https://api.notion.com/v1/data_sources/${DATA_SOURCE_ID}`, {
+    headers: notionHeaders(env.NOTION_TOKEN),
+  });
+  if (!res.ok) throw new Error(`schema request failed: ${res.status}`);
+
+  const data = await res.json();
+  const status = Object.values(data.properties).find((property) => property.type === "status");
+  if (!status) throw new Error("status property not found");
+  return status.id;
+}
+
+function toTask(page, statusId) {
   const p = page.properties;
+  const status = Object.values(p).find((property) => property.id === statusId);
   return {
     id: page.id,
     name: extractTitle(p["タスク名"]),
-    status: p["ステータス"]?.status?.name ?? null,
+    status: status?.status?.name ?? null,
     labels: (p["ラベル"]?.multi_select || []).map((o) => o.name),
     priority: p["優先度"]?.select?.name ?? null,
     due: p["期限"]?.date?.start ?? null,
@@ -54,6 +67,13 @@ function toTask(page) {
 }
 
 async function listTasks(env, origin) {
+  let statusId;
+  try {
+    statusId = await statusPropertyId(env);
+  } catch (error) {
+    return json({ error: "notion_schema_failed", detail: error.message }, 502, origin);
+  }
+
   const res = await fetch(
     `https://api.notion.com/v1/data_sources/${DATA_SOURCE_ID}/query`,
     {
@@ -62,7 +82,7 @@ async function listTasks(env, origin) {
       body: JSON.stringify({
         filter: {
           or: ACTIVE_STATUSES.map((name) => ({
-            property: "ステータス",
+            property: statusId,
             status: { equals: name },
           })),
         },
@@ -75,17 +95,24 @@ async function listTasks(env, origin) {
     return json({ error: "notion_query_failed", detail: text }, 502, origin);
   }
   const data = await res.json();
-  const tasks = data.results.map(toTask);
+  const tasks = data.results.map((page) => toTask(page, statusId));
   return json({ tasks }, 200, origin);
 }
 
 async function completeTask(env, origin, pageId) {
+  let statusId;
+  try {
+    statusId = await statusPropertyId(env);
+  } catch (error) {
+    return json({ error: "notion_schema_failed", detail: error.message }, 502, origin);
+  }
+
   const res = await fetch(`https://api.notion.com/v1/pages/${pageId}`, {
     method: "PATCH",
     headers: notionHeaders(env.NOTION_TOKEN),
     body: JSON.stringify({
       properties: {
-        ステータス: { status: { name: DONE_STATUS } },
+        [statusId]: { status: { name: DONE_STATUS } },
         完了日: { date: { start: new Date().toISOString().slice(0, 10) } },
       },
     }),
