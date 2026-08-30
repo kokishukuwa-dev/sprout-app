@@ -1,0 +1,8 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" role="img" aria-label="発芽">
+  <rect width="512" height="512" rx="112" fill="#f7f3e8"/>
+  <circle cx="256" cy="331" r="101" fill="#9b6b45"/>
+  <path d="M256 337V181" fill="none" stroke="#548645" stroke-linecap="round" stroke-width="42"/>
+  <path d="M236 218C145 216 111 139 127 77c82 0 130 43 109 141Z" fill="#74ae57"/>
+  <path d="M277 218C369 216 402 139 386 77c-82 0-130 43-109 141Z" fill="#8bc96a"/>
+  <path d="M158 104c35 24 58 57 73 101M354 104c-35 24-58 57-73 101" fill="none" stroke="#c6e7b3" stroke-linecap="round" stroke-width="13"/>
+</svg>
