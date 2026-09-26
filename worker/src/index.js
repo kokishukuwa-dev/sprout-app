@@ -9,13 +9,27 @@ const ALLOWED_ORIGINS = [
   "http://127.0.0.1:8788",
 ];
 
+const PAGE_ID_PATTERN = /^[0-9a-f]{8}-?[0-9a-f]{4}-?[0-9a-f]{4}-?[0-9a-f]{4}-?[0-9a-f]{12}$/i;
+
 function corsHeaders(origin) {
-  const allowed = ALLOWED_ORIGINS.includes(origin) ? origin : ALLOWED_ORIGINS[0];
+  // 許可外のOriginにはCORSヘッダーを返さない（ブラウザ経由の読み取りを許さない）
+  if (!ALLOWED_ORIGINS.includes(origin)) return { Vary: "Origin" };
   return {
-    "Access-Control-Allow-Origin": allowed,
+    "Access-Control-Allow-Origin": origin,
     "Access-Control-Allow-Methods": "GET, PATCH, OPTIONS",
     "Access-Control-Allow-Headers": "Content-Type",
+    Vary: "Origin",
   };
+}
+
+function normalizeId(id) {
+  return String(id || "").replace(/-/g, "").toLowerCase();
+}
+
+// Notionのエラー本文はログにだけ残し、クライアントには返さない
+async function notionFailure(res, error, origin) {
+  console.error(error, res.status, await res.text());
+  return json({ error }, 502, origin);
 }
 
 function json(data, status, origin) {
@@ -71,7 +85,8 @@ async function listTasks(env, origin) {
   try {
     statusId = await statusPropertyId(env);
   } catch (error) {
-    return json({ error: "notion_schema_failed", detail: error.message }, 502, origin);
+    console.error("notion_schema_failed", error.message);
+    return json({ error: "notion_schema_failed" }, 502, origin);
   }
 
   const res = await fetch(
@@ -90,21 +105,34 @@ async function listTasks(env, origin) {
       }),
     }
   );
-  if (!res.ok) {
-    const text = await res.text();
-    return json({ error: "notion_query_failed", detail: text }, 502, origin);
-  }
+  if (!res.ok) return notionFailure(res, "notion_query_failed", origin);
   const data = await res.json();
   const tasks = data.results.map((page) => toTask(page, statusId));
   return json({ tasks }, 200, origin);
 }
 
 async function completeTask(env, origin, pageId) {
+  if (!PAGE_ID_PATTERN.test(pageId)) {
+    return json({ error: "invalid_task_id" }, 400, origin);
+  }
+
+  // タスクDB以外のページを書き換えないよう、親データソースを確かめてから更新する
+  const pageRes = await fetch(`https://api.notion.com/v1/pages/${pageId}`, {
+    headers: notionHeaders(env.NOTION_TOKEN),
+  });
+  if (pageRes.status === 404) return json({ error: "not_found" }, 404, origin);
+  if (!pageRes.ok) return notionFailure(pageRes, "notion_page_failed", origin);
+  const page = await pageRes.json();
+  if (normalizeId(page.parent?.data_source_id) !== normalizeId(DATA_SOURCE_ID)) {
+    return json({ error: "not_found" }, 404, origin);
+  }
+
   let statusId;
   try {
     statusId = await statusPropertyId(env);
   } catch (error) {
-    return json({ error: "notion_schema_failed", detail: error.message }, 502, origin);
+    console.error("notion_schema_failed", error.message);
+    return json({ error: "notion_schema_failed" }, 502, origin);
   }
 
   const res = await fetch(`https://api.notion.com/v1/pages/${pageId}`, {
@@ -117,10 +145,7 @@ async function completeTask(env, origin, pageId) {
       },
     }),
   });
-  if (!res.ok) {
-    const text = await res.text();
-    return json({ error: "notion_update_failed", detail: text }, 502, origin);
-  }
+  if (!res.ok) return notionFailure(res, "notion_update_failed", origin);
   return json({ ok: true }, 200, origin);
 }
 
