@@ -3,6 +3,9 @@
   var UNCATEGORIZED = "未分類";
   var SPROUT_EMOJI = {};
   var DEFAULT_SPROUT = "🌱";
+  var TAB_KEY = "sprout:tabs";
+  var THEME_KEY = "sprout:theme";
+  var ALL = "すべて";
 
   var state = {
     tasks: [],
@@ -78,6 +81,7 @@
       var data = await res.json();
       state.tasks = data.tasks || [];
       state.loading = false;
+      if (!filterChosen) state.filter = TabPrefs.getDefault(TAB_KEY, filterIds(), ALL);
     } catch (e) {
       console.error(e);
       state.loading = false;
@@ -145,10 +149,16 @@
     });
   }
 
+  var filterChosen = false;
+
+  function filterIds() {
+    return [ALL].concat(projectList());
+  }
+
   function renderFilters() {
     var el = document.getElementById("filters");
-    var projects = projectList();
-    var chips = ["すべて"].concat(projects);
+    var ids = filterIds();
+    var chips = TabPrefs.sort(TAB_KEY, ids);
     el.innerHTML = chips
       .map(function (p) {
         var active = p === state.filter ? " active" : "";
@@ -156,12 +166,58 @@
       })
       .join("");
     el.querySelectorAll(".chip").forEach(function (btn) {
+      var id = btn.getAttribute("data-p");
       btn.addEventListener("click", function () {
-        state.filter = btn.getAttribute("data-p");
+        state.filter = id;
+        filterChosen = true;
         render();
       });
+      // 右クリック（長押し）で起動時のタブ・並び順、ドラッグで並び替え
+      TabPrefs.bind(TAB_KEY, btn, id, ids, renderFilters);
     });
   }
+
+  function currentTheme() {
+    try {
+      return localStorage.getItem(THEME_KEY) || "dark";
+    } catch (e) {
+      return "dark";
+    }
+  }
+
+  function applyTheme(mode) {
+    try {
+      localStorage.setItem(THEME_KEY, mode);
+    } catch (e) {
+      // 保存できなくても今の画面には反映する
+    }
+    if (mode === "system") document.documentElement.removeAttribute("data-theme");
+    else document.documentElement.setAttribute("data-theme", mode);
+  }
+
+  // 見出しの右クリック（長押し）で表示モードを選ぶ
+  TabPrefs.onContext(document.querySelector("header"), function (x, y) {
+    var now = currentTheme();
+    var modes = [
+      ["dark", "ダーク"],
+      ["light", "ライト"],
+      ["system", "端末の設定に合わせる"],
+    ];
+    TabPrefs.openMenu(
+      x,
+      y,
+      modes.map(function (m) {
+        return {
+          label: m[1] + (now === m[0] ? "（設定中）" : ""),
+          checked: now === m[0],
+          disabled: now === m[0],
+          run: function () {
+            applyTheme(m[0]);
+          },
+        };
+      })
+    );
+  });
 
   function renderStage() {
     var stage = document.getElementById("stage");

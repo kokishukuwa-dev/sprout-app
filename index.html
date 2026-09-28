@@ -5,6 +5,11 @@
 <meta name="viewport" content="width=device-width,initial-scale=1">
 <title>発芽</title>
 <meta name="theme-color" content="#548645">
+<script>
+// 表示モード（既定はダーク）。描画前に当てて白いちらつきを防ぐ。見出しの右クリックで変更できる
+(function(){var m="dark";try{m=localStorage.getItem("sprout:theme")||"dark";}catch(e){}
+if(m!=="system")document.documentElement.setAttribute("data-theme",m);})();
+</script>
 <link rel="icon" href="icon.svg" type="image/svg+xml">
 <link rel="apple-touch-icon" href="icon.svg">
 <link rel="manifest" href="site.webmanifest">
@@ -26,6 +31,7 @@
     <div class="stage" id="stage"><div class="loading">読み込み中…</div></div>
   </div>
 </div>
+<script src="tab-prefs.js"></script>
 <script src="app.js"></script>
 </body>
 </html>
